@@ -1,0 +1,31 @@
+[tool.uv]
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux'",
+]
+
+[project]
+name = "agentic-memory-eval"
+version = "0.1.0"
+description = "Benchmark comparing Cognee knowledge-graph memory vs keyword-overlap baseline for LLM agents"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "langgraph>=0.2.0",
+    "langchain>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-ollama>=0.2.0",
+
+    # Cognee memory
+    "cognee>=0.1.16",
+
+    # Evaluation
+    "deepeval>=2.0.0",
+    "google-genai>=1.0.0",   # Gemini as DeepEval judge (free tier)
+
+    # Utilities
+    "pydantic>=2.0",
+    "python-dotenv>=1.0",
+    "rich>=13.0",
+]
