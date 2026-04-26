@@ -194,7 +194,7 @@ Runs GEval correctness and faithfulness metrics on every task for both agents.
 
 ```text
 Cognee KG vs InMemory Baseline
-LLM: llama3.1:8b | Scenarios: 6 | Tasks: 10
+LLM: llama3.1:8b | Scenarios: 6 | Tasks: 9
 
 ─────────────────────────────────────────────────────────────────
 Cognee KG

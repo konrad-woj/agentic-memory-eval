@@ -86,7 +86,9 @@ SCENARIOS: list[Scenario] = [
             ),
             Task(
                 instruction="Who manages the Acme Corp account?",
-                expect_calls=[],
+                expect_calls=[
+                    ToolAssertion("no_action", {}, "Information-only query — no action needed"),
+                ],
                 expect_not_called=["send_email", "create_ticket", "escalate", "schedule_meeting"],
                 expected_answer_contains=["sarah", "sales"],
                 expected_answer="Sarah from the Sales team manages the Acme Corp account.",
@@ -215,7 +217,9 @@ SCENARIOS: list[Scenario] = [
         tasks=[
             Task(
                 instruction="It's May 2025. Check if GlobalTech needs any immediate attention.",
-                expect_calls=[],
+                expect_calls=[
+                    ToolAssertion("no_action", {}, "No conditions met — must explicitly do nothing"),
+                ],
                 expect_not_called=["escalate", "send_email", "create_ticket", "schedule_meeting"],
                 expected_answer_contains=["no"],
                 expected_answer="No action needed. GlobalTech has 0 open tickets, SLAs met, renewal not until January 2026.",
@@ -259,7 +263,9 @@ SCENARIOS: list[Scenario] = [
             ),
             Task(
                 instruction="What is Acme Corp's current satisfaction score?",
-                expect_calls=[],
+                expect_calls=[
+                    ToolAssertion("no_action", {}, "Information-only query — no action needed"),
+                ],
                 expect_not_called=["update_crm", "send_email", "create_ticket"],
                 expected_answer_contains=["6.2"],
                 expected_answer="Acme Corp's satisfaction score is 6.2, down from 8.5 last quarter.",
