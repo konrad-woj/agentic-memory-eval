@@ -18,6 +18,7 @@ load_dotenv()
 
 OLLAMA_MODEL = os.getenv("LLM_MODEL", "llama3.1:8b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+VECTOR_EMBEDDING_MODEL = os.getenv("VECTOR_EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5")
 
 TOOL_PROMPT = """You have these tools. Call them by writing TOOL_CALL: tool(args) on its own line.
 
@@ -181,6 +182,57 @@ class BaselineAgent(BaseAgent):
 
     async def reset(self):
         self._memories.clear()
+        self.action_log.clear()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Vector: dense embedding retrieval (sentence-transformers, no graph)
+# ═══════════════════════════════════════════════════════════════════════
+
+class VectorAgent(BaseAgent):
+    """Dense vector retrieval via sentence-transformers cosine similarity.
+
+    Isolates the contribution of the knowledge graph: same embedding quality
+    as a modern retrieval system, but without entity/relationship extraction.
+    Model: BAAI/bge-large-en-v1.5 (top MTEB retrieval, ~1.3 GB download on first run).
+    """
+
+    def __init__(self, user_id: str = "default"):
+        super().__init__(user_id)
+        self._model = None
+        self._facts: list[str] = []
+        self._embeddings = None  # numpy array shape (n_facts, dim), L2-normalised
+
+    def _get_model(self):
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer
+            self._model = SentenceTransformer(VECTOR_EMBEDDING_MODEL)
+        return self._model
+
+    async def store_facts(self, facts: list[str]) -> dict[str, Any]:
+        import numpy as np
+        t0 = time.time()
+        self._facts = list(facts)
+        self._embeddings = self._get_model().encode(
+            self._facts, normalize_embeddings=True, show_progress_bar=False,
+        )
+        return {"stored": len(facts), "latency_s": time.time() - t0}
+
+    async def retrieve(self, query: str, top_k: int = 10) -> list[str]:
+        if not self._facts or self._embeddings is None:
+            return []
+        import numpy as np
+        q_emb = self._get_model().encode(
+            [query], normalize_embeddings=True, show_progress_bar=False,
+        )
+        # Cosine similarity = dot product of L2-normalised vectors
+        scores = (self._embeddings @ q_emb.T).flatten()
+        top_idx = np.argsort(scores)[::-1][:top_k]
+        return [self._facts[i] for i in top_idx if scores[i] > 0.25]
+
+    async def reset(self) -> None:
+        self._facts.clear()
+        self._embeddings = None
         self.action_log.clear()
 
 

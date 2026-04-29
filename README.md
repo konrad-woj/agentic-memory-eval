@@ -18,34 +18,34 @@ The baseline (`BaselineAgent`) uses a Python dict and keyword overlap scoring �
 ## Architecture
 
 ```text
-┌────────────────────────────────────────────────┐
-│           Three-Layer Eval Harness             │
-│  Retrieval (F1) + Action (pass/fail) + Answer  │
-└────────┬───────────────────────┬───────────────┘
-         │                       │
-  ┌──────▼──────┐        ┌──────▼──────┐
-  │  Cognee KG  │        │  InMemory   │
-  │  Agent      │        │  Baseline   │
-  └──────┬──────┘        └──────┬──────┘
-         │  shared tools:        │
-         │  send_email           │
-         │  create_ticket        │
-         │  schedule_meeting     │
-         │  escalate             │
-         │  update_crm           │
-         │  no_action            │
-         │                       │
-  ┌──────▼───────────────────────▼──┐
-  │         Ollama (llama3.1)       │
-  └─────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                  Three-Layer Eval Harness                    │
+│       Retrieval (F1) + Action (pass/fail) + Answer           │
+└──────────┬───────────────────┬──────────────────┬───────────┘
+           │                   │                  │
+  ┌────────▼───────┐  ┌────────▼──────┐  ┌───────▼────────┐
+  │   Cognee KG    │  │    Vector     │  │   InMemory     │
+  │   Agent        │  │   Agent       │  │   Baseline     │
+  └────────┬───────┘  └────────┬──────┘  └───────┬────────┘
+           │   shared tools:   │                  │
+           │   send_email      │                  │
+           │   create_ticket   │                  │
+           │   schedule_meeting│                  │
+           │   escalate        │                  │
+           │   update_crm      │                  │
+           │   no_action       │                  │
+           │                   │                  │
+  ┌────────▼───────────────────▼──────────────────▼────────┐
+  │                   Ollama (llama3.1)                     │
+  └─────────────────────────────────────────────────────────┘
 ```
 
 ```text
 agentic-memory-eval/
-├── agents.py                   # BaselineAgent + CogneeAgent (shared base)
+├── agents.py                   # BaselineAgent + VectorAgent + CogneeAgent (shared base)
 ├── .env.template               # copy to .env and fill in keys
 ├── apps/eval/
-│   ├── scenarios.py            # 6 eval scenarios, 10 tasks, ground truth
+│   ├── scenarios.py            # 9 eval scenarios, 18 tasks, ground truth
 │   ├── metrics.py              # deterministic scoring: retrieval / action / answer
 │   ├── run_eval.py             # main evaluation harness (CLI)
 │   ├── deepeval_suite.py       # LLM-as-judge layer (DeepEval + Gemini/Ollama/OpenAI)
@@ -57,9 +57,12 @@ agentic-memory-eval/
 | Agent | Memory backend | Store | Retrieve |
 | --- | --- | --- | --- |
 | `BaselineAgent` | Python dict | O(1) append | keyword overlap scoring |
+| `VectorAgent` | In-memory numpy array | sentence-transformers encode | cosine similarity (`BAAI/bge-large-en-v1.5`) |
 | `CogneeAgent` | Cognee knowledge graph (LanceDB vectors) | `cognee.add` + `cognee.cognify` | `SearchType.GRAPH_COMPLETION` |
 
-Both agents expose the same interface: `store_facts(facts)`, `retrieve(query)`, `execute_task(instruction)`, `reset()`.
+`VectorAgent` is the key addition: it isolates what dense embeddings alone contribute versus the graph structure, using `BAAI/bge-large-en-v1.5` (top-tier MTEB retrieval, ~1.3 GB download on first run, configurable via `VECTOR_EMBEDDING_MODEL` env var).
+
+All agents expose the same interface: `store_facts(facts)`, `retrieve(query)`, `execute_task(instruction)`, `reset()`.
 
 ### Evaluation metrics
 
@@ -82,14 +85,17 @@ The optional `deepeval_suite.py` adds LLM-as-judge **Correctness** (GEval) and *
 
 ### Scenarios
 
-| Scenario | Difficulty | What it tests |
-| --- | --- | --- |
-| `basic_recall_action` | single-hop | Direct fact → single tool call; ignores distractor facts |
-| `multi_hop_routing` | multi-hop | Chain facts across entities to derive priority + assignee |
-| `temporal_updates` | temporal | Prefer newest fact (updated contact) over older one |
-| `cross_entity_decisions` | cross-entity | Synthesise across 3 clients → different actions per client |
-| `negative_distractor` | negative | Correctly do nothing when conditions are not met |
-| `ambiguous_crm_update` | ambiguous | Apply multiple policies from underspecified instruction |
+| Scenario | Tasks | Difficulty | What it tests |
+| --- | --- | --- | --- |
+| `basic_recall_action` | 2 | single-hop | Direct fact → single tool call; ignores distractor facts |
+| `multi_hop_routing` | 2 | multi-hop | Chain facts across entities to derive priority + assignee |
+| `temporal_updates` | 2 | temporal | Prefer newest fact (updated contact/ticket) over older one |
+| `cross_entity_decisions` | 2 | cross-entity | Synthesise across 3 clients → different actions per client |
+| `negative_distractor` | 1 | negative | Correctly do nothing when conditions are not met |
+| `ambiguous_crm_update` | 2 | ambiguous | Apply multiple policies from underspecified instruction |
+| `churn_risk_triage` | 2 | multi-hop | Connect satisfaction + ticket count + policy to flag at-risk accounts |
+| `account_upgrade_chain` | 3 | multi-hop | Apply chained upgrade policies triggered by a funding milestone |
+| `sla_incident_response` | 2 | temporal | Derive SLA tier from incident timestamps; apply correct follow-up policy |
 
 ## Setup (Mac)
 
@@ -162,8 +168,11 @@ Filter by scenario name or agent:
 # Only the temporal scenario
 PYTHONPATH=. python apps/eval/run_eval.py --scenario temporal
 
-# Only the baseline agent (no Cognee required)
+# Only the baseline agent (no Cognee or model download required)
 PYTHONPATH=. python apps/eval/run_eval.py --agent baseline
+
+# Only the vector agent (downloads BAAI/bge-large-en-v1.5 on first run, ~1.3 GB)
+PYTHONPATH=. python apps/eval/run_eval.py --agent vector
 
 # Combine filters
 PYTHONPATH=. python apps/eval/run_eval.py --scenario multi_hop --agent cognee
@@ -194,7 +203,7 @@ Runs GEval correctness and faithfulness metrics on every task for both agents.
 
 ```text
 Cognee KG vs InMemory Baseline
-LLM: llama3.1:8b | Scenarios: 6 | Tasks: 9
+LLM: llama3.1:8b | Scenarios: 9 | Tasks: 18
 
 ─────────────────────────────────────────────────────────────────
 Cognee KG

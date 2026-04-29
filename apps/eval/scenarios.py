@@ -168,6 +168,17 @@ SCENARIOS: list[Scenario] = [
                 ],
                 difficulty=Difficulty.TEMPORAL,
             ),
+            Task(
+                instruction="What is the current status of support ticket TK-442?",
+                expect_calls=[
+                    ToolAssertion("no_action", {}, "Information query — no action needed"),
+                ],
+                expect_not_called=["send_email", "create_ticket", "escalate"],
+                expected_answer_contains=["resolved", "closed"],
+                expected_answer="TK-442 was resolved and closed in April 2025.",
+                required_facts=["UPDATE April 2025: TK-442 was resolved and closed."],
+                difficulty=Difficulty.TEMPORAL,
+            ),
         ],
     ),
 
@@ -199,6 +210,17 @@ SCENARIOS: list[Scenario] = [
                     "Escalation policy: escalate to VP for clients with SLA breach risk.",
                     "Quarterly review policy: schedule review meeting for all clients with contract > $1M.",
                 ],
+                difficulty=Difficulty.CROSS_ENTITY,
+            ),
+            Task(
+                instruction="Which of our clients has the largest contract value?",
+                expect_calls=[
+                    ToolAssertion("no_action", {}, "Information query — no action needed"),
+                ],
+                expect_not_called=["send_email", "create_ticket", "escalate", "schedule_meeting", "update_crm"],
+                expected_answer_contains=["nexus", "2m"],
+                expected_answer="Nexus AI has the largest contract at $2M.",
+                required_facts=["Nexus AI: $2M contract, AI/ML, 1 open ticket (P2), moderate satisfaction."],
                 difficulty=Difficulty.CROSS_ENTITY,
             ),
         ],
@@ -274,6 +296,162 @@ SCENARIOS: list[Scenario] = [
             ),
         ],
     ),
+    # ── 7. Churn risk triage — multi-hop + cross-entity ──
+    Scenario(
+        name="churn_risk_triage",
+        description="Detect churn signals by connecting satisfaction, ticket count, and policy across clients",
+        seed_facts=[
+            "RetailCo: $600K contract, contact anna@retailco.com, renewal in 45 days.",
+            "RetailCo satisfaction score dropped to 5.1 this quarter (was 8.0 last quarter).",
+            "RetailCo has 4 unresolved support tickets opened in the last 30 days.",
+            "Churn risk policy: flag account for retention if satisfaction < 6.0 AND open tickets > 3.",
+            "Retention policy: when an account is flagged, schedule a retention call with the account manager.",
+            "RetailCo account manager: Tom (tom@ourcompany.com).",
+            "DataSafe: $1.5M contract, contact cto@datasafe.io, satisfaction 8.5, 0 open tickets, all SLAs met.",
+        ],
+        tasks=[
+            Task(
+                instruction="Review all client accounts for churn risk and take necessary actions.",
+                expect_calls=[
+                    ToolAssertion("schedule_meeting", {"attendees": "tom"}, "Schedule retention call with RetailCo AM"),
+                ],
+                expect_not_called=["escalate"],
+                expected_answer_contains=["retailco", "retention", "tom"],
+                expected_answer="RetailCo flagged for churn risk (satisfaction 5.1, 4 open tickets). Scheduled retention call with Tom. DataSafe healthy — no action.",
+                required_facts=[
+                    "RetailCo satisfaction score dropped to 5.1 this quarter (was 8.0 last quarter).",
+                    "RetailCo has 4 unresolved support tickets opened in the last 30 days.",
+                    "Churn risk policy: flag account for retention if satisfaction < 6.0 AND open tickets > 3.",
+                    "Retention policy: when an account is flagged, schedule a retention call with the account manager.",
+                    "RetailCo account manager: Tom (tom@ourcompany.com).",
+                ],
+                difficulty=Difficulty.MULTI_HOP,
+            ),
+            Task(
+                instruction="Is RetailCo at churn risk? Summarise the evidence.",
+                expect_calls=[
+                    ToolAssertion("no_action", {}, "Information query — no action needed"),
+                ],
+                expect_not_called=["send_email", "create_ticket", "escalate", "schedule_meeting"],
+                expected_answer_contains=["retailco", "5.1", "4"],
+                expected_answer="Yes. RetailCo satisfaction is 5.1 (below 6.0) and has 4 open tickets (above 3). Both churn conditions are met.",
+                required_facts=[
+                    "RetailCo satisfaction score dropped to 5.1 this quarter (was 8.0 last quarter).",
+                    "RetailCo has 4 unresolved support tickets opened in the last 30 days.",
+                    "Churn risk policy: flag account for retention if satisfaction < 6.0 AND open tickets > 3.",
+                ],
+                difficulty=Difficulty.MULTI_HOP,
+            ),
+        ],
+    ),
+
+    # ── 8. Account upgrade chain — multi-hop + ambiguous ──
+    Scenario(
+        name="account_upgrade_chain",
+        description="Apply a chain of upgrade policies triggered by a client funding milestone",
+        seed_facts=[
+            "TechStart: contact bob@techstart.io, currently on Starter plan, annual contract $200K.",
+            "TechStart announced Series B funding of $18M on 2025-03-15.",
+            "Upgrade policy: move client to Growth plan when funding round exceeds $10M.",
+            "Growth plan includes: dedicated success manager and monthly business reviews.",
+            "Monthly business review policy: schedule within 30 days of plan upgrade.",
+            "Success manager pool: Lisa (available), Raj (available), Wei (on leave).",
+            "Assignment policy: when multiple success managers are available, assign alphabetically.",
+            "DISTRACTOR: TechStart CEO posted about AI trends on LinkedIn. Not actionable.",
+        ],
+        tasks=[
+            Task(
+                instruction="TechStart just informed us of their Series B. Update their account accordingly.",
+                expect_calls=[
+                    ToolAssertion("update_crm", {"company": "techstart", "field": "plan", "value": "growth"}, "Upgrade to Growth plan"),
+                    ToolAssertion("schedule_meeting", {"topic": "review"}, "Schedule monthly business review"),
+                ],
+                expect_not_called=["escalate"],
+                expected_answer_contains=["techstart", "growth", "review"],
+                expected_answer="Upgraded TechStart to Growth plan ($18M Series B exceeds $10M threshold). Scheduled monthly business review within 30 days. Assigned Lisa as success manager.",
+                required_facts=[
+                    "TechStart announced Series B funding of $18M on 2025-03-15.",
+                    "Upgrade policy: move client to Growth plan when funding round exceeds $10M.",
+                    "Monthly business review policy: schedule within 30 days of plan upgrade.",
+                ],
+                difficulty=Difficulty.MULTI_HOP,
+            ),
+            Task(
+                instruction="Who should be assigned as TechStart's dedicated success manager, and why?",
+                expect_calls=[
+                    ToolAssertion("no_action", {}, "Information query — no action needed"),
+                ],
+                expect_not_called=["send_email", "create_ticket", "escalate", "schedule_meeting", "update_crm"],
+                expected_answer_contains=["lisa"],
+                expected_answer="Lisa should be assigned. Lisa and Raj are both available (Wei is on leave). Alphabetically, Lisa comes before Raj.",
+                required_facts=[
+                    "Success manager pool: Lisa (available), Raj (available), Wei (on leave).",
+                    "Assignment policy: when multiple success managers are available, assign alphabetically.",
+                ],
+                difficulty=Difficulty.MULTI_HOP,
+            ),
+            Task(
+                instruction="What plan is TechStart currently on?",
+                expect_calls=[
+                    ToolAssertion("no_action", {}, "Information query — no action needed"),
+                ],
+                expect_not_called=["update_crm", "send_email", "create_ticket", "escalate"],
+                expected_answer_contains=["starter"],
+                expected_answer="TechStart is currently on the Starter plan with a $200K annual contract.",
+                required_facts=["TechStart: contact bob@techstart.io, currently on Starter plan, annual contract $200K."],
+                difficulty=Difficulty.SINGLE_HOP,
+            ),
+        ],
+    ),
+
+    # ── 9. SLA incident response — temporal + multi-hop + negative ──
+    Scenario(
+        name="sla_incident_response",
+        description="Derive SLA tier from incident timestamps, then apply correct post-incident policy",
+        seed_facts=[
+            "SkyBank: $2.5M contract, financial services, contact ops@skybank.com.",
+            "2025-04-15 09:00 — SkyBank reports severe API latency, production impacted.",
+            "2025-04-15 09:45 — Engineering identifies root cause: database connection pool exhausted.",
+            "2025-04-15 10:15 — Hotfix deployed, SkyBank API fully restored. Incident closed.",
+            "SLA policy: incidents resolved within 2 hours are P2. Incidents over 2 hours are P1 and require VP escalation.",
+            "Post-incident policy: send a resolution summary to the client within 24 hours of resolution.",
+            "VP of Engineering: priya@ourcompany.com.",
+        ],
+        tasks=[
+            Task(
+                instruction="The SkyBank incident on April 15 is now resolved. Handle any required follow-up.",
+                expect_calls=[
+                    ToolAssertion("send_email", {"to": "ops@skybank.com"}, "Send resolution summary per post-incident policy"),
+                ],
+                expect_not_called=["escalate"],
+                expected_answer_contains=["skybank", "p2", "resolution"],
+                expected_answer="Incident lasted 75 minutes (P2 — under 2-hour threshold). No VP escalation needed. Sent resolution summary to ops@skybank.com per post-incident policy.",
+                required_facts=[
+                    "2025-04-15 09:00 — SkyBank reports severe API latency, production impacted.",
+                    "2025-04-15 10:15 — Hotfix deployed, SkyBank API fully restored. Incident closed.",
+                    "SLA policy: incidents resolved within 2 hours are P2. Incidents over 2 hours are P1 and require VP escalation.",
+                    "Post-incident policy: send a resolution summary to the client within 24 hours of resolution.",
+                ],
+                difficulty=Difficulty.TEMPORAL,
+            ),
+            Task(
+                instruction="Should the SkyBank April 15 incident be escalated to VP?",
+                expect_calls=[
+                    ToolAssertion("no_action", {}, "Information query — no action needed"),
+                ],
+                expect_not_called=["escalate", "send_email", "create_ticket"],
+                expected_answer_contains=["no", "p2"],
+                expected_answer="No. The incident resolved in 75 minutes, below the 2-hour P1 threshold. It is classified as P2, which does not require VP escalation.",
+                required_facts=[
+                    "2025-04-15 09:00 — SkyBank reports severe API latency, production impacted.",
+                    "2025-04-15 10:15 — Hotfix deployed, SkyBank API fully restored. Incident closed.",
+                    "SLA policy: incidents resolved within 2 hours are P2. Incidents over 2 hours are P1 and require VP escalation.",
+                ],
+                difficulty=Difficulty.TEMPORAL,
+            ),
+        ],
+    ),
+
 ]
 
 

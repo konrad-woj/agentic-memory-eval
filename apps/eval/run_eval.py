@@ -17,7 +17,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 
-from agents import BaselineAgent, CogneeAgent
+from agents import BaselineAgent, CogneeAgent, VectorAgent
 from metrics import (
     E2EScore, TaskResult,
     aggregate_e2e, score_actions, score_answer_heuristic, score_retrieval,
@@ -183,7 +183,7 @@ def save_results(all_tasks: dict[str, list[TaskResult]]):
 async def main():
     parser = argparse.ArgumentParser(description="Cognee KG vs InMemory baseline evaluation")
     parser.add_argument("--scenario", type=str, default=None, help="Filter scenarios by name substring")
-    parser.add_argument("--agent", choices=["cognee", "baseline"], default=None, help="Run only one agent")
+    parser.add_argument("--agent", choices=["cognee", "vector", "baseline"], default=None, help="Run only one agent")
     args = parser.parse_args()
 
     from rich.console import Console
@@ -201,9 +201,11 @@ async def main():
             return
 
     agents = {}
-    if args.agent != "baseline":
+    if args.agent in (None, "cognee"):
         agents["Cognee KG"] = CogneeAgent
-    if args.agent != "cognee":
+    if args.agent in (None, "vector"):
+        agents["Vector"] = VectorAgent
+    if args.agent in (None, "baseline"):
         agents["Baseline"] = BaselineAgent
 
     all_e2e: dict[str, list[E2EScore]] = {n: [] for n in agents}
