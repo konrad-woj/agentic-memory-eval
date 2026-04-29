@@ -204,7 +204,7 @@ async def main():
     if args.agent in (None, "cognee"):
         agents["Cognee KG"] = CogneeAgent
     if args.agent in (None, "vector"):
-        agents["Vector"] = VectorAgent
+        agents["Vector (ablation)"] = VectorAgent
     if args.agent in (None, "baseline"):
         agents["Baseline"] = BaselineAgent
 

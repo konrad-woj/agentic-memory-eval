@@ -57,10 +57,10 @@ agentic-memory-eval/
 | Agent | Memory backend | Store | Retrieve |
 | --- | --- | --- | --- |
 | `BaselineAgent` | Python dict | O(1) append | keyword overlap scoring |
-| `VectorAgent` | In-memory numpy array | sentence-transformers encode | cosine similarity (`BAAI/bge-large-en-v1.5`) |
+| `VectorAgent` *(ablation)* | In-memory numpy array | sentence-transformers encode | cosine similarity (`BAAI/bge-large-en-v1.5`) |
 | `CogneeAgent` | Cognee knowledge graph (LanceDB vectors) | `cognee.add` + `cognee.cognify` | `SearchType.GRAPH_COMPLETION` |
 
-`VectorAgent` is the key addition: it isolates what dense embeddings alone contribute versus the graph structure, using `BAAI/bge-large-en-v1.5` (top-tier MTEB retrieval, ~1.3 GB download on first run, configurable via `VECTOR_EMBEDDING_MODEL` env var).
+`VectorAgent` is an **ablation control**, not a standalone recommendation. The core comparison is keyword memory vs knowledge graph. The vector condition exists to answer one specific question: if Cognee wins, is the gain from graph structure (entity extraction, relationship traversal, multi-hop) — or just from using better embeddings than keyword overlap? Without it, that's unanswerable. Model: `BAAI/bge-large-en-v1.5` (top-tier MTEB retrieval, ~1.3 GB on first run, configurable via `VECTOR_EMBEDDING_MODEL`).
 
 All agents expose the same interface: `store_facts(facts)`, `retrieve(query)`, `execute_task(instruction)`, `reset()`.
 

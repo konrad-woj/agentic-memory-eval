@@ -190,11 +190,14 @@ class BaselineAgent(BaseAgent):
 # ═══════════════════════════════════════════════════════════════════════
 
 class VectorAgent(BaseAgent):
-    """Dense vector retrieval via sentence-transformers cosine similarity.
+    """Ablation: dense vector retrieval without graph structure.
 
-    Isolates the contribution of the knowledge graph: same embedding quality
-    as a modern retrieval system, but without entity/relationship extraction.
-    Model: BAAI/bge-large-en-v1.5 (top MTEB retrieval, ~1.3 GB download on first run).
+    Answers the question: does Cognee win because of its graph structure, or
+    simply because it uses better retrieval than keyword overlap?
+
+    Same embedding quality as a modern retrieval system (BAAI/bge-large-en-v1.5,
+    top MTEB retrieval, ~1.3 GB download on first run), but no entity extraction,
+    no relationship graph, no multi-hop traversal.
     """
 
     def __init__(self, user_id: str = "default"):
